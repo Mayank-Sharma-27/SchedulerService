@@ -1,11 +1,12 @@
 package service;
 
-import lombok.SneakyThrows;
 import models.Task;
 
 import java.util.Comparator;
 import java.util.PriorityQueue;
-import java.util.concurrent.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -35,7 +36,7 @@ public class SchedulerService implements Runnable {
                 }
 
                 while (!taskQueue.isEmpty()) {
-                    timeToSleep = taskQueue.peek().getTimeUnit().toMillis(taskQueue.peek().getScheduledTime() - System.currentTimeMillis());
+                    timeToSleep = taskQueue.peek().getScheduledTime() - System.currentTimeMillis();
                     if (timeToSleep <= 0) {
                         break;
                     }
@@ -56,11 +57,24 @@ public class SchedulerService implements Runnable {
                         taskQueue.add(task);
                     }
                     case RECUR_WITH_WAIT -> {
-                        Future<?> future = threadPoolExecutor.submit(task.getTask());
-                        future.get();
-                        scheduledTime = System.currentTimeMillis() + task.getTimeUnit().toMillis(task.getRecurringTime());
-                        task.setScheduledTime(scheduledTime);
-                        taskQueue.add(task);
+                        threadPoolExecutor.submit(() -> {
+                            try {
+                                task.getTask().run();
+
+                                // Reschedule after task completes
+                                lock.lock();
+                                try {
+                                    long newTime = System.currentTimeMillis() + task.getTimeUnit().toMillis(task.getRecurringTime());
+                                    task.setScheduledTime(newTime);
+                                    taskQueue.add(task);
+                                    condition.signalAll();
+                                } finally {
+                                    lock.unlock();
+                                }
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        });
 
                     }
                 }
