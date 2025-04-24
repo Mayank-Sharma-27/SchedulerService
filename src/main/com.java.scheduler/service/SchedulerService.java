@@ -4,8 +4,8 @@ import models.Task;
 
 import java.util.Comparator;
 import java.util.PriorityQueue;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -14,20 +14,19 @@ import java.util.concurrent.locks.ReentrantLock;
 public class SchedulerService implements Runnable {
 
     private final PriorityQueue<Task> taskQueue;
-    private final ThreadPoolExecutor threadPoolExecutor;
+    private final ExecutorService executorService;
     private final Lock lock;
     private final Condition condition;
 
     public SchedulerService() {
         this.taskQueue = new PriorityQueue<>(Comparator.comparingLong(Task::getScheduledTime));;
-        this.threadPoolExecutor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
+        this.executorService = Executors.newCachedThreadPool();
         this.lock = new ReentrantLock();
         this.condition = this.lock.newCondition();
     }
 
     @Override
     public void run() {
-        Long timeToSleep = 0l;
         while (true) {
             lock.lock();
             try {
@@ -36,28 +35,32 @@ public class SchedulerService implements Runnable {
                 }
 
                 while (!taskQueue.isEmpty()) {
-                    timeToSleep = taskQueue.peek().getScheduledTime() - System.currentTimeMillis();
+                    Long timeToSleep = taskQueue.peek().getScheduledTime() - System.currentTimeMillis();
+                    // If the task is due break from loop and start
+                    // executing the callback
                     if (timeToSleep <= 0) {
                         break;
                     }
+                    // sleep until the earliest due callback can be executed
                     condition.await(timeToSleep, TimeUnit.MILLISECONDS);
                 }
-
+                // Because we have a min-heap the first element of the queue
+                // is necessarily the one which is due.
                 Task task = taskQueue.poll();
                 Long scheduledTime = 0l;
 
                 switch (task.getTaskType()) {
                     case RUN_ONCE -> {
-                        threadPoolExecutor.submit(task.getTask());
+                        executorService.submit(task.getTask());
                     }
                     case RECUR -> {
                         scheduledTime = System.currentTimeMillis() + task.getTimeUnit().toMillis(task.getRecurringTime());;
-                        threadPoolExecutor.submit(task.getTask());
+                        executorService.submit(task.getTask());
                         task.setScheduledTime(scheduledTime);
                         taskQueue.add(task);
                     }
                     case RECUR_WITH_WAIT -> {
-                        threadPoolExecutor.submit(() -> {
+                        executorService.submit(() -> {
                             try {
                                 task.getTask().run();
 

@@ -439,3 +439,7 @@ If we didn't encapsulate task metadata:
 This scheduler service demonstrates the use of Java's concurrency primitives to implement a flexible task scheduling system. By using locks, conditions, and thread pools, it provides efficient task execution while maintaining thread safety and proper timing.
 
 Each component plays a vital role in ensuring the scheduler functions correctly, efficiently, and safely in a multi-threaded environment. Understanding the purpose of each part and how they work together is key to both implementing and maintaining such a system.
+
+Check this post for reference https://leetcode.com/discuss/post/2661002/afraid-of-multi-threading-interview-task-5hwk/
+
+Read this course as well https://www.educative.io/courses/java-multithreading-for-senior-engineering-interviews
